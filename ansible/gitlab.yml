@@ -1,0 +1,62 @@
+
+---
+- name: Deploy and configure GitLab and GitLab Runner
+  hosts: gitlab
+  become: true
+  vars:
+    gitlab_omnibus_config: |
+      external_url 'http://{{ gitlab_external_url }}'
+      gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port | default(22) }}
+  pre_tasks:
+    - name: Ensure required packages are present
+      ansible.builtin.package:
+        name: [curl, ca-certificates, tzdata]
+        state: present
+
+  tasks:
+    - name: Install GitLab Omnibus repository
+      ansible.builtin.shell: |
+        curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ee/script.deb.sh | bash
+      args:
+        creates: /etc/apt/sources.list.d/gitlab_gitlab-ee.list
+
+    - name: Install GitLab EE
+      ansible.builtin.package:
+        name: gitlab-ee
+        state: present
+
+    - name: Configure GitLab external URL
+      ansible.builtin.copy:
+        dest: /etc/gitlab/gitlab.rb
+        content: "{{ gitlab_omnibus_config }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Reconfigure GitLab
+      ansible.builtin.shell: gitlab-ctl reconfigure
+
+    - name: Ensure GitLab is running
+      ansible.builtin.shell: gitlab-ctl status
+
+    - name: Install GitLab Runner repository
+      ansible.builtin.shell: |
+        curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash
+      args:
+        creates: /etc/apt/sources.list.d/runner_gitlab-runner.list
+
+    - name: Install GitLab Runner
+      ansible.builtin.package:
+        name: gitlab-runner
+        state: present
+
+    - name: Register runner (non-interactive)
+      ansible.builtin.shell: |
+        gitlab-runner register --non-interactive           --url "{{ gitlab_runner_url }}"           --registration-token "{{ gitlab_runner_token }}"           --executor "docker"           --docker-image "alpine:latest"           --description "code-keeper-main-runner"           --tag-list "docker,aws,ci"           --run-untagged="true"           --locked="false"
+      when: gitlab_runner_token is defined and gitlab_runner_url is defined
+
+    - name: Start and enable runner
+      ansible.builtin.service:
+        name: gitlab-runner
+        state: started
+        enabled: true

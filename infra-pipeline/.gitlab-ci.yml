@@ -1,0 +1,69 @@
+
+stages:
+  - init
+  - validate
+  - plan
+  - apply_staging
+  - approval
+  - apply_production
+
+image: hashicorp/terraform:1.9
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+
+before_script:
+  - terraform --version
+  - cd terraform
+  - terraform init -upgrade
+
+init:
+  stage: init
+  script:
+    - terraform init -upgrade
+  artifacts:
+    paths: [terraform/.terraform, terraform/.terraform.lock.hcl]
+
+validate:
+  stage: validate
+  script:
+    - terraform validate
+  needs: ["init"]
+
+plan:
+  stage: plan
+  script:
+    - terraform workspace new staging || terraform workspace select staging
+    - terraform plan -var-file=env/staging.tfvars -out=plan-staging.tfplan
+    - terraform workspace new production || terraform workspace select production
+    - terraform plan -var-file=env/production.tfvars -out=plan-production.tfplan
+  needs: ["validate"]
+  artifacts:
+    paths:
+      - terraform/plan-staging.tfplan
+      - terraform/plan-production.tfplan
+
+apply_staging:
+  stage: apply_staging
+  script:
+    - terraform workspace select staging
+    - terraform apply -auto-approve plan-staging.tfplan
+  needs: ["plan"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop"'
+
+approval:
+  stage: approval
+  when: manual
+  allow_failure: false
+  needs: ["apply_staging"]
+
+apply_production:
+  stage: apply_production
+  script:
+    - terraform workspace select production
+    - terraform apply -auto-approve plan-production.tfplan
+  needs: ["approval"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'

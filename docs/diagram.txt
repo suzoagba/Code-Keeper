@@ -1,0 +1,9 @@
+
+User
+  -> GitLab (SCM, CI/CD)
+      -> Runners (Docker)
+          -> Build/Test/Scan/Containerize
+          -> Deploy to Staging (manual approval)
+          -> Deploy to Production
+  -> Ansible (provision GitLab & Runner)
+  -> Terraform (staging/prod workspaces) -> Cloud Provider (VPC, ECS/EKS, DB, MQ)
