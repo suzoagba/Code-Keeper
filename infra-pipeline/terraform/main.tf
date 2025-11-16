@@ -34,6 +34,6 @@ module "cloud_design" {
   # Add any required inputs here to match the real module interface
 }
 
-output "env" {
+output "" {
   value = var.env
 }
